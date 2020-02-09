@@ -30,19 +30,16 @@ class Dopamine(layers.Layer):
 """
 DopamineEx is a trainable connections layer with bias
 """
-class DopamineEx(layers.Layer):
+class DopamineEx(Dopamine):
 	"""
 	input_shape:input_shape
 	tf2.0 Sequential fit bug, tf2.0 must have batch_size	
 	"""
 	def __init__(self, input_shape, batch_size = None, dtype=tf.float32):
 		#assert (not tf.__version__.startswith('2.0')) or (batch_size != None)
-		super(DopamineEx, self).__init__()
-		self.kernel = self.add_weight('DopamineEx_w', input_shape, dtype=dtype)
-		self.bias  = self.add_weight('DopamineEx_b', input_shape, dtype=dtype)		
-		self.kernel.assign(tf.ones(input_shape, dtype=dtype))
+		super(DopamineEx, self).__init__(input_shape, batch_size, dtype)
+		self.bias = self.add_weight('DopamineEx_b', input_shape, dtype=dtype)		
 		self.bias.assign(tf.zeros(input_shape, dtype=dtype))
-		self.inputs_shape = [batch_size] + input_shape
 
 	def call(self, inputs, training=None):
 		#tf2.0 Sequential fit bug, inputs.shape[0] is sometimes None
