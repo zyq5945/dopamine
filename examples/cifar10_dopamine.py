@@ -18,8 +18,8 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 batch_size = 200
 num_classes = 10
 shuffle_size = 60000
-epochs = 2
-validation_freq = 2
+epochs = 20
+validation_freq = 1
 dopamine_batch_size = batch_size
 
 
