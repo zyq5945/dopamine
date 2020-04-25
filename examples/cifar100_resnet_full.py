@@ -18,10 +18,11 @@ np.random.seed(22)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 batchsz = 250
-epochs = 180
+epochs = 600
 validation_freq = 1
 input_shape = (batchsz, 32, 32, 3)
 model_path = 'data/'
+initial_epoch = 0
 dopamine_batch_size = batchsz
 
 # 1. 归一化函数实现；cifar100 均值和方差，自己计算的。
@@ -93,7 +94,7 @@ def load_data():
 
 
 def create_params():
-    optimizer = tf.keras.optimizers.SGD(lr=0.1, momentum=0.9, decay=5e-4)
+    optimizer = tf.keras.optimizers.SGD(lr=0.1, momentum=0.7, decay=5e-4)
     loss = tf.losses.SparseCategoricalCrossentropy(from_logits=True)
     acc = tf.keras.metrics.SparseCategoricalAccuracy()
     return optimizer, loss, acc
@@ -108,15 +109,19 @@ def create_models():
     return ResNet18(), Sequential(lys)
 
 
-def save_models(resnet_model, class_model, epoch, acc):
-    acc = int(acc*10000)
-    save_model(resnet_model, '%s%05d_%03d_my_model1.h5' % (model_path, acc, epoch))
-    save_model(class_model, '%s%05d_%03d_my_model2.h5' % (model_path, acc, epoch))
+def load_models(model, resnet_model, class_model):
+    argv = sys.argv;
+    argn = len(argv)
+    if argn < 3:
+        return
 
+    global initial_epoch
+    initial_epoch = int(argv[1])
+    load_model(resnet_model, argv[2])
 
-def load_models(resnet_model, class_model):
-    load_model(resnet_model, 'data/my_model1.h5')
-    load_model(class_model, 'data/my_model2.h5')
+    if argn < 4:
+        return
+    load_model(class_model, argv[3])
 
 
 def load_model(model, file):
@@ -124,11 +129,17 @@ def load_model(model, file):
         model.load_weights(file)
 
 
+def save_models(resnet_model, class_model, epoch, acc):
+    acc = int(acc*10000)
+    save_model(resnet_model, '%s%05d_%03d_model1.h5' % (model_path, acc, epoch))
+    save_model(class_model, '%s%05d_%03d_model2.h5' % (model_path, acc, epoch))
+
+
 def save_model(model, file):
     model.save_weights(file)
 
 
-def create_callbacks(resnet_model, class_model):
+def create_task_callback(model, resnet_model, class_model):
     # def on_epoch_begin(epoch, logs):
     #     print('----on_epoch_begin', epoch, logs)
 
@@ -136,7 +147,11 @@ def create_callbacks(resnet_model, class_model):
         key = 'val_sparse_categorical_accuracy'
         acc = logs[key] if key in logs else 0.0
         save_models(resnet_model, class_model, epoch, acc)
-        # print('----on_epoch_end', epoch, logs)
+
+        do_layer = class_model.get_layer(index=1)
+        tf.summary.histogram('class_dopamine_kernel', do_layer.kernel)
+        if do_layer.bias is not None:
+            tf.summary.histogram('dopamine_bias', do_layer.bias)
 
     # def on_batch_begin(batch, logs):
     #     print('----on_batch_begin', batch, logs)
@@ -161,19 +176,61 @@ def create_callbacks(resnet_model, class_model):
         # on_train_end=on_train_end,
     )
 
-    lrs_cb = tf.keras.callbacks.LearningRateScheduler(lr_schedule_300ep)
-    csv_logger = tf.keras.callbacks.CSVLogger('data/training.log')
-    tb_logger = tf.keras.callbacks.TensorBoard(
-        log_dir='logs',
-        histogram_freq=0,
-        write_graph=False,
-        write_images=False,
-        update_freq='batch',  # epoch or batch
-        profile_batch=2,
-        embeddings_freq=0, )
+    return task_callback
 
-    # callbacks = [lrs_cb, csv_logger, tb_logger]
-    callbacks = [lrs_cb, tb_logger, csv_logger, task_callback]
+
+def create_callbacks(model, resnet_model, class_model):
+    callbacks = [
+        create_task_callback(model, resnet_model, class_model),
+
+        tf.keras.callbacks.LearningRateScheduler(lr_schedule_300ep),
+        # tf.keras.callbacks.ReduceLROnPlateau(
+        #     monitor='val_loss',
+        #     factor=0.25,
+        #     patience=10,
+        #     verbose=0,
+        #     mode='auto',
+        #     min_delta=0.0001,
+        #     cooldown=0,
+        #     min_lr=0,
+        # ),
+
+        tf.keras.callbacks.CSVLogger('data/training.log'),
+
+        tf.keras.callbacks.TensorBoard(
+            log_dir='logs',
+            histogram_freq=0,
+            write_graph=False,
+            write_images=False,
+            update_freq='batch',  # epoch or batch
+            profile_batch=2,
+            embeddings_freq=0,
+        ),
+
+        # tf.keras.callbacks.ModelCheckpoint(
+        #     filepath='data/mcp.{epoch:03d}-{val_loss:.06f}.hdf5',
+        #     monitor='val_loss',
+        #     verbose=0,
+        #     save_best_only=False,
+        #     save_weights_only=True,
+        #     mode='auto',
+        #     save_freq='epoch',
+        # ),
+
+        tf.keras.callbacks.EarlyStopping(
+            monitor='val_loss',
+            min_delta=0,
+            patience=20,
+            verbose=0,
+            mode='auto',
+            baseline=None,
+            restore_best_weights=False
+        ),
+
+        tf.keras.callbacks.TerminateOnNaN(),
+
+    ]
+
     return callbacks
 
 
@@ -181,6 +238,7 @@ def main():
     train_db, test_db = load_data()
 
     resnet_model, class_model = create_models()
+
     model = Sequential([resnet_model, class_model])
     optimizer, loss, acc = create_params()
     model.compile(
@@ -189,15 +247,15 @@ def main():
         metrics=[acc]
     )
     model.build(input_shape=input_shape)
+    load_models(model, resnet_model, class_model)
+
     model.summary()
-
-    # load_models(resnet_model, class_model)
-
-    callbacks = create_callbacks(resnet_model, class_model)
+    callbacks = create_callbacks(model, resnet_model, class_model)
     model.fit(
         train_db,
         epochs=epochs,
         validation_data=test_db,
+        initial_epoch=initial_epoch,
         validation_freq=validation_freq,
         callbacks=callbacks
     )

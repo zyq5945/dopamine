@@ -1,0 +1,17 @@
+## Ignore build results and temporary files.
+
+Backup*
+_UpgradeReport_Files
+bin
+obj
+__pycache__/
+
+*.mdb
+*.pdb
+*.pidb
+*.suo
+*.user
+*.userprefs
+UpgradeLog*.*
+.DS_Store
+

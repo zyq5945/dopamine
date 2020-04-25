@@ -6,6 +6,9 @@ import numpy as np
 
 import sys
 
+tf.random.set_seed(22)
+np.random.seed(22)
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 def main():
     print("tensorflow version:", tf.__version__)

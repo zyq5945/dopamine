@@ -52,7 +52,7 @@ def preprocess(x, y):
 def lr_schedule_300ep(epoch):
     if epoch < 60:
         return 0.1
-    if epoch < 130:
+    if epoch < 120:
         return 0.02
     if epoch < 160:
         return 0.004
@@ -94,7 +94,7 @@ def load_data():
 
 
 def create_params():
-    optimizer = tf.keras.optimizers.SGD(lr=0.1, momentum=0.9, decay=5e-4)
+    optimizer = tf.keras.optimizers.SGD(lr=0.1, momentum=0.7, decay=5e-4)
     loss = tf.losses.SparseCategoricalCrossentropy(from_logits=True)
     acc = tf.keras.metrics.SparseCategoricalAccuracy()
     return optimizer, loss, acc
